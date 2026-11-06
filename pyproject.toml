@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "trialmark-forge"
+version = "0.1.0"
+description = "A Trialmark runner that acceptance-tests Forge's AI steps (answering, summarising, drafting, extracting, classifying and checking) through Forge's evaluation API, on the models you choose."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "PE (peshwar9)" }]
+keywords = ["llm", "evaluation", "acceptance testing", "trialmark", "forge"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Software Development :: Testing",
+]
+dependencies = ["trialmark>=0.5.1", "certifi"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.entry-points."trialmark.runners"]
+forge = "trialmark_forge:ForgeRunner"
+
+[project.urls]
+Homepage = "https://github.com/peshwar9/trialmark-forge"
+Trialmark = "https://github.com/peshwar9/trialmark"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/trialmark_forge"]
