@@ -24,10 +24,8 @@ settings (below).
 ## Install
 
 ```
-pip install git+https://github.com/peshwar9/trialmark-forge
+pip install trialmark-forge
 ```
-
-It will be on PyPI as `trialmark-forge` from its first release there.
 
 Trialmark finds the runner once the package is installed; `trialmark plugins` lists it as `forge`.
 
