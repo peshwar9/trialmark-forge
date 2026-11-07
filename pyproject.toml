@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "trialmark-forge"
-version = "0.1.0"
-description = "A Trialmark runner that acceptance-tests Forge's AI steps (answering, summarising, drafting, extracting, classifying and checking) through Forge's evaluation API, on the models you choose."
+version = "0.2.0"
+description = "A Trialmark runner that acceptance-tests Forge's AI steps (answering, summarising, drafting, extracting, classifying, changing records in words and checking) through Forge's evaluation API, on the models you choose."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]

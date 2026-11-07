@@ -15,6 +15,7 @@ applied. Nothing in Forge changes: every call is a dry run.
 |---|---|---|---|
 | `answer`, `summarise`, `draft` | A Project | The question or instruction, as a string | The answer's text, with its citations |
 | `extract` | An app that reads documents | The document's text, as a string, or `{"files": [...]}` | The fields or rows, as JSON |
+| `update` | A register or workflow | The instruction, as a string, or `{"instruction": "...", "today": "YYYY-MM-DD"}` | The change the app's chat would make, flattened: `{"op": "add", "due": "...", ...}`, `{"op": "update", "record_title": "...", ...}`, or `{"op": "none"}` |
 | `classify` | An app with a chart of accounts | `{"rows": [{"description": "...", "direction": "Debit"}]}` | Each row's account, as JSON |
 | `check` | An app with checks, such as vendor onboarding | `{"kind": "vendor", "fields": {...}, "detected": [...]}` | Each check's result, as JSON; no model is called |
 

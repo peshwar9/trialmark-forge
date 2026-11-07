@@ -24,7 +24,7 @@ Runner options:
 
 Model settings:
   target:     what to run: ``kind`` (answer, summarise, draft, extract, classify,
-              check) and ``project_id`` or ``tracker_id``. Required.
+              update, check) and ``project_id`` or ``tracker_id``. Required.
   options:    passed to Forge with every case, such as ``{"today": "2026-11-06"}``
               for extraction, so a relative date means the same on every run.
   model:      the model Forge should run, when it differs from the entry's id.
@@ -32,10 +32,12 @@ Model settings:
   expected_input_tokens, expected_output_tokens: for the cost estimate only.
 
 A case's input is a string or an object. A string becomes ``{"prompt": …}`` for
-answer, summarise and draft, and ``{"text": …}`` for extract; an object is sent as
-it is. For answer, summarise and draft the output Trialmark scores is the answer's
-text, so text scorers such as ``judge`` and ``checklist`` work unchanged; for the
-other kinds it is Forge's JSON output.
+answer, summarise and draft, ``{"instruction": …}`` for update, and ``{"text": …}``
+for extract; an object is sent as it is, so an update case can fix its own
+``today``. For answer, summarise and draft the output Trialmark scores is the
+answer's text, so text scorers such as ``judge`` and ``checklist`` work unchanged;
+for update it is the change flattened into fields (see ``_flatten_changes``); for
+the other kinds it is Forge's JSON output.
 """
 
 from __future__ import annotations
@@ -51,16 +53,16 @@ from typing import Any
 
 from trialmark import RunOutput
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 DEFAULT_BASE_URL = "https://www.forgeprivate.com"
 TEXT_KINDS = ("answer", "summarise", "draft")
-KINDS = (*TEXT_KINDS, "extract", "classify", "check")
+KINDS = (*TEXT_KINDS, "extract", "classify", "update", "check")
 
 # Rough sizes for the estimate, from Forge's own runs: an answer reads about ten
 # thousand tokens of retrieved passages; the other steps read mostly their input.
-_EXPECTED_INPUT = {"answer": 11000, "summarise": 20000, "draft": 20000, "extract": 2000, "classify": 1500, "check": 0}
-_EXPECTED_OUTPUT = {"answer": 400, "summarise": 800, "draft": 1200, "extract": 600, "classify": 300, "check": 0}
+_EXPECTED_INPUT = {"answer": 11000, "summarise": 20000, "draft": 20000, "extract": 2000, "classify": 1500, "update": 7000, "check": 0}
+_EXPECTED_OUTPUT = {"answer": 400, "summarise": 800, "draft": 1200, "extract": 600, "classify": 300, "update": 250, "check": 0}
 
 
 def _tls_context() -> ssl.SSLContext:
@@ -72,6 +74,28 @@ def _tls_context() -> ssl.SSLContext:
         return ssl.create_default_context(cafile=certifi.where())
     except ImportError:
         return ssl.create_default_context()
+
+
+def _flatten_changes(out: dict[str, Any]) -> dict[str, Any]:
+    """An update's output as fields a scorer can compare.
+
+    One change becomes one flat object, its fields beside "op" (and "record_title"
+    for an edit), so the ``fields`` scorer checks a reference such as
+    ``{"op": "update", "record_title": "Board pack", "due": "2026-11-13"}``. No
+    change is ``{"op": "none"}``; several are ``{"op": "several", "count": n,
+    "changes": [...]}``. The chat's reply is kept under "reply".
+    """
+    changes = out.get("changes") or []
+    reply = out.get("reply", "")
+    if not changes:
+        return {"op": "none", "reply": reply}
+    if len(changes) > 1:
+        return {"op": "several", "count": len(changes), "changes": changes, "reply": reply}
+    c = changes[0]
+    flat = {k: v for k, v in c.items() if k != "data"}
+    flat.update(c.get("data") or {})
+    flat["reply"] = reply
+    return flat
 
 
 class ForgeError(Exception):
@@ -183,7 +207,9 @@ class ForgeRunner:
         if isinstance(value, dict):
             return value
         if isinstance(value, str):
-            return {"prompt": value} if kind in TEXT_KINDS else {"text": value}
+            if kind in TEXT_KINDS:
+                return {"prompt": value}
+            return {"instruction": value} if kind == "update" else {"text": value}
         raise ForgeError(f"A {kind} case's input must be a string or an object.")
 
     def estimate_cost(self, model: Any, case: Any) -> float | None:
@@ -218,6 +244,8 @@ class ForgeRunner:
         out = r.get("output")
         if kind in TEXT_KINDS and isinstance(out, dict):
             out = out.get("text", "")
+        elif kind == "update" and isinstance(out, dict):
+            out = _flatten_changes(out)
         error = None
         if r.get("finish") == "length":
             error = "The answer was cut off at Forge's output limit."

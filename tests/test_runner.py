@@ -22,7 +22,8 @@ TARGETS = {
         {"kind": "project", "id": PROJECT, "name": "Model Benchmark",
          "capabilities": [{"kind": k, "settings_fingerprint": "jcs-sha256:p"} for k in ("answer", "summarise", "draft")]},
         {"kind": "app", "id": APP, "name": "Vendor onboarding",
-         "capabilities": [{"kind": "extract", "settings_fingerprint": "jcs-sha256:e"}, {"kind": "check", "settings_fingerprint": "jcs-sha256:c"}]},
+         "capabilities": [{"kind": "extract", "settings_fingerprint": "jcs-sha256:e"}, {"kind": "update", "settings_fingerprint": "jcs-sha256:u"},
+                          {"kind": "check", "settings_fingerprint": "jcs-sha256:c"}]},
     ],
     "models": [{"id": "claude-haiku-4-5-20251001", "input_usd_per_mtok": 1, "output_usd_per_mtok": 5}],
 }
@@ -185,3 +186,30 @@ def test_a_cut_off_answer_is_an_error(monkeypatch, tmp_path):
     fake = FakeForge(run_body={"output": {"text": "Partial"}, "finish": "length", "cost_usd": 0.01, "notes": []})
     out = runner(fake, monkeypatch, tmp_path).run(answer_model(), Case(id="m1", input="Q?", reference=""))
     assert out.error == "The answer was cut off at Forge's output limit."
+
+
+def test_an_update_is_sent_as_an_instruction_and_flattened_for_scoring(monkeypatch, tmp_path):
+    fake = FakeForge(run_body={"output": {"reply": "Moved to Friday.", "changes": [
+        {"op": "update", "record_id": "r1", "record_title": "Board pack", "data": {"due": "2026-11-13"}}]},
+        "cost_usd": 0.008, "latency_ms": 1200, "finish": "stop", "settings_fingerprint": "jcs-sha256:u", "notes": []})
+    r = runner(fake, monkeypatch, tmp_path)
+    m = ModelEntry(id="claude-haiku-4-5-20251001", runner="forge", settings={"target": {"kind": "update", "tracker_id": APP}})
+    out = r.run(m, Case(id="u1", input="move the board pack to Friday", reference={}))
+    assert fake.sent[0]["input"] == {"instruction": "move the board pack to Friday"}
+    assert out.output == {"op": "update", "record_id": "r1", "record_title": "Board pack", "due": "2026-11-13", "reply": "Moved to Friday."}
+
+
+def test_an_update_case_can_fix_its_own_today(monkeypatch, tmp_path):
+    fake = FakeForge(run_body={"output": {"reply": "Nothing changed.", "changes": []}, "cost_usd": 0.004, "notes": []})
+    r = runner(fake, monkeypatch, tmp_path)
+    m = ModelEntry(id="claude-haiku-4-5-20251001", runner="forge", settings={"target": {"kind": "update", "tracker_id": APP}})
+    out = r.run(m, Case(id="u2", input={"instruction": "what is due?", "today": "2026-11-13"}, reference={}))
+    assert fake.sent[0]["input"] == {"instruction": "what is due?", "today": "2026-11-13"}
+    assert out.output == {"op": "none", "reply": "Nothing changed."}
+
+
+def test_several_changes_are_counted():
+    from trialmark_forge import _flatten_changes
+
+    out = _flatten_changes({"reply": "Split.", "changes": [{"op": "add", "data": {}}, {"op": "add", "data": {}}, {"op": "update", "record_id": "x", "data": {}}]})
+    assert out["op"] == "several" and out["count"] == 3
