@@ -15,6 +15,7 @@ from trialmark_forge import ForgeError, ForgeRunner
 
 PROJECT = "11111111-1111-4111-8111-111111111111"
 APP = "22222222-2222-4222-8222-222222222222"
+STATEMENTS = "33333333-3333-4333-8333-333333333333"
 
 TARGETS = {
     "forge_version": "5bc99c4abcdef",
@@ -24,6 +25,8 @@ TARGETS = {
         {"kind": "app", "id": APP, "name": "Vendor onboarding",
          "capabilities": [{"kind": "extract", "settings_fingerprint": "jcs-sha256:e"}, {"kind": "update", "settings_fingerprint": "jcs-sha256:u"},
                           {"kind": "check", "settings_fingerprint": "jcs-sha256:c"}]},
+        {"kind": "app", "id": STATEMENTS, "name": "Bank statement classifier",
+         "capabilities": [{"kind": "classify", "settings_fingerprint": "jcs-sha256:k"}]},
     ],
     "models": [{"id": "claude-haiku-4-5-20251001", "input_usd_per_mtok": 1, "output_usd_per_mtok": 5}],
 }
@@ -107,7 +110,7 @@ def test_extract_takes_text_and_options_and_returns_json(monkeypatch, tmp_path):
     out = r.run(m, Case(id="v1", input="PAN: AABCS1234F", reference={}))
     assert fake.sent[0]["input"] == {"text": "PAN: AABCS1234F"}
     assert fake.sent[0]["options"] == {"today": "2026-11-06"}
-    assert out.output == {"kind": "vendor", "fields": {"pan": "AABCS1234F"}}
+    assert out.output == {"pan": "AABCS1234F"}
 
 
 def test_a_check_sends_no_model_and_costs_nothing(monkeypatch, tmp_path):
@@ -213,3 +216,25 @@ def test_several_changes_are_counted():
 
     out = _flatten_changes({"reply": "Split.", "changes": [{"op": "add", "data": {}}, {"op": "add", "data": {}}, {"op": "update", "record_id": "x", "data": {}}]})
     assert out["op"] == "several" and out["count"] == 3
+
+
+def test_a_classification_of_one_row_is_its_account(monkeypatch, tmp_path):
+    fake = FakeForge(run_body={"output": {"results": [{"account": "Travel & conveyance", "source": "llm"}], "accounts": ["Travel & conveyance", "Rent"]},
+                               "cost_usd": 0.001, "notes": []})
+    r = runner(fake, monkeypatch, tmp_path)
+    m = ModelEntry(id="claude-haiku-4-5-20251001", runner="forge", settings={"target": {"kind": "classify", "tracker_id": STATEMENTS}})
+    out = r.run(m, Case(id="c1", input={"rows": [{"description": "UBER TRIP", "direction": "Debit"}]}, reference="Travel & conveyance"))
+    assert fake.sent[0]["input"] == {"rows": [{"description": "UBER TRIP", "direction": "Debit"}]}
+    assert out.output == "Travel & conveyance"
+
+
+def test_a_classification_of_several_rows_is_a_list():
+    from trialmark_forge import _flatten_classification
+
+    assert _flatten_classification({"results": [{"account": "Rent"}, {"account": "Insurance"}]}) == ["Rent", "Insurance"]
+
+
+def test_a_contract_extraction_is_unwrapped():
+    from trialmark_forge import _flatten_extraction
+
+    assert _flatten_extraction({"kind": "contract", "extraction": {"milestones": []}}) == {"milestones": []}

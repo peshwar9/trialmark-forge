@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0, 8 November 2026
+
+- An extraction's output is unwrapped for scoring: a vendor's fields, or a contract's
+  extraction, so the `fields` scorer compares them with the case's reference directly.
+- A classification's output is the account chosen for a single row, so the `label` scorer
+  compares it with the case's reference; several rows give a list of accounts.
+
 ## 0.2.0, 7 November 2026
 
 - The `update` target: a plain-language instruction to change an app's records, run as a dry run

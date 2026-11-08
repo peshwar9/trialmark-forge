@@ -37,7 +37,10 @@ for extract; an object is sent as it is, so an update case can fix its own
 ``today``. For answer, summarise and draft the output Trialmark scores is the
 answer's text, so text scorers such as ``judge`` and ``checklist`` work unchanged;
 for update it is the change flattened into fields (see ``_flatten_changes``); for
-the other kinds it is Forge's JSON output.
+extract it is the extracted fields, so the ``fields`` scorer compares them; for
+classify it is the account chosen for a single row, so the ``label`` scorer
+compares it, or the list of accounts for several rows; for check it is Forge's
+JSON output.
 """
 
 from __future__ import annotations
@@ -53,7 +56,7 @@ from typing import Any
 
 from trialmark import RunOutput
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 DEFAULT_BASE_URL = "https://www.forgeprivate.com"
 TEXT_KINDS = ("answer", "summarise", "draft")
@@ -96,6 +99,24 @@ def _flatten_changes(out: dict[str, Any]) -> dict[str, Any]:
     flat.update(c.get("data") or {})
     flat["reply"] = reply
     return flat
+
+
+def _flatten_extraction(out: dict[str, Any]) -> Any:
+    """An extraction's output as the fields a scorer compares: a vendor's fields, or
+    a contract's extraction, without the wrapper that names the kind."""
+    if out.get("kind") == "vendor" and isinstance(out.get("fields"), dict):
+        return dict(out["fields"])
+    if out.get("kind") == "contract" and "extraction" in out:
+        return out["extraction"]
+    return out
+
+
+def _flatten_classification(out: dict[str, Any]) -> Any:
+    """A classification's output as labels: the account for a single row, which the
+    ``label`` scorer compares with the case's reference, or the list of accounts
+    for several rows."""
+    accounts = [str((r or {}).get("account") or "") for r in (out.get("results") or [])]
+    return accounts[0] if len(accounts) == 1 else accounts
 
 
 class ForgeError(Exception):
@@ -246,6 +267,10 @@ class ForgeRunner:
             out = out.get("text", "")
         elif kind == "update" and isinstance(out, dict):
             out = _flatten_changes(out)
+        elif kind == "extract" and isinstance(out, dict):
+            out = _flatten_extraction(out)
+        elif kind == "classify" and isinstance(out, dict):
+            out = _flatten_classification(out)
         error = None
         if r.get("finish") == "length":
             error = "The answer was cut off at Forge's output limit."
