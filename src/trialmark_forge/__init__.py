@@ -24,7 +24,7 @@ Runner options:
 
 Model settings:
   target:     what to run: ``kind`` (answer, summarise, draft, extract, classify,
-              update, check) and ``project_id`` or ``tracker_id``. Required.
+              update, check, read-reply) and ``project_id`` or ``tracker_id``. Required.
   options:    passed to Forge with every case, such as ``{"today": "2026-11-06"}``
               for extraction, so a relative date means the same on every run.
   model:      the model Forge should run, when it differs from the entry's id.
@@ -39,8 +39,10 @@ answer's text, so text scorers such as ``judge`` and ``checklist`` work unchange
 for update it is the change flattened into fields (see ``_flatten_changes``); for
 extract it is the extracted fields, so the ``fields`` scorer compares them; for
 classify it is the account chosen for a single row, so the ``label`` scorer
-compares it, or the list of accounts for several rows; for check it is Forge's
-JSON output.
+compares it, or the list of accounts for several rows; for read-reply it is the
+reading of the reply (its outcome, dates and the rest), so the ``fields`` scorer
+compares it; for check it is Forge's JSON output. A read-reply case's input is an
+object: the reply, the commitment's fields and the day it is read on.
 """
 
 from __future__ import annotations
@@ -56,16 +58,16 @@ from typing import Any
 
 from trialmark import RunOutput
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 DEFAULT_BASE_URL = "https://www.forgeprivate.com"
 TEXT_KINDS = ("answer", "summarise", "draft")
-KINDS = (*TEXT_KINDS, "extract", "classify", "update", "check")
+KINDS = (*TEXT_KINDS, "extract", "classify", "update", "check", "read-reply")
 
 # Rough sizes for the estimate, from Forge's own runs: an answer reads about ten
 # thousand tokens of retrieved passages; the other steps read mostly their input.
-_EXPECTED_INPUT = {"answer": 11000, "summarise": 20000, "draft": 20000, "extract": 2000, "classify": 1500, "update": 7000, "check": 0}
-_EXPECTED_OUTPUT = {"answer": 400, "summarise": 800, "draft": 1200, "extract": 600, "classify": 300, "update": 250, "check": 0}
+_EXPECTED_INPUT = {"answer": 11000, "summarise": 20000, "draft": 20000, "extract": 2000, "classify": 1500, "update": 7000, "check": 0, "read-reply": 900}
+_EXPECTED_OUTPUT = {"answer": 400, "summarise": 800, "draft": 1200, "extract": 600, "classify": 300, "update": 250, "check": 0, "read-reply": 150}
 
 
 def _tls_context() -> ssl.SSLContext:
@@ -271,6 +273,8 @@ class ForgeRunner:
             out = _flatten_extraction(out)
         elif kind == "classify" and isinstance(out, dict):
             out = _flatten_classification(out)
+        elif kind == "read-reply" and isinstance(out, dict):
+            out = out.get("interpretation", out)
         error = None
         if r.get("finish") == "length":
             error = "The answer was cut off at Forge's output limit."

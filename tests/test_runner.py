@@ -16,6 +16,7 @@ from trialmark_forge import ForgeError, ForgeRunner
 PROJECT = "11111111-1111-4111-8111-111111111111"
 APP = "22222222-2222-4222-8222-222222222222"
 STATEMENTS = "33333333-3333-4333-8333-333333333333"
+ACTIONS = "44444444-4444-4444-8444-444444444444"
 
 TARGETS = {
     "forge_version": "5bc99c4abcdef",
@@ -27,6 +28,8 @@ TARGETS = {
                           {"kind": "check", "settings_fingerprint": "jcs-sha256:c"}]},
         {"kind": "app", "id": STATEMENTS, "name": "Bank statement classifier",
          "capabilities": [{"kind": "classify", "settings_fingerprint": "jcs-sha256:k"}]},
+        {"kind": "app", "id": ACTIONS, "name": "Actions",
+         "capabilities": [{"kind": "update", "settings_fingerprint": "jcs-sha256:u2"}, {"kind": "read-reply", "settings_fingerprint": "jcs-sha256:r"}]},
     ],
     "models": [{"id": "claude-haiku-4-5-20251001", "input_usd_per_mtok": 1, "output_usd_per_mtok": 5}],
 }
@@ -238,3 +241,16 @@ def test_a_contract_extraction_is_unwrapped():
     from trialmark_forge import _flatten_extraction
 
     assert _flatten_extraction({"kind": "contract", "extraction": {"milestones": []}}) == {"milestones": []}
+
+
+def test_a_reply_is_scored_on_its_reading(monkeypatch, tmp_path):
+    reading = {"outcome": "New date", "summary": "Will be done Friday.", "newDue": "2026-11-13"}
+    fake = FakeForge(run_body={"output": {"interpretation": reading, "changes": {"stage": "open", "data": {}},
+                                          "acknowledgement": "Thanks. I've noted the new date, Fri 13 Nov."},
+                               "cost_usd": 0.0002, "notes": []})
+    r = runner(fake, monkeypatch, tmp_path)
+    m = ModelEntry(id="claude-haiku-4-5-20251001", runner="forge", settings={"target": {"kind": "read-reply", "tracker_id": ACTIONS}})
+    case_input = {"reply": "It'll be done by Friday", "today": "2026-11-09", "action": {"action": "Send the agreements"}}
+    out = r.run(m, Case(id="r03", input=case_input, reference={"outcome": "New date", "newDue": "2026-11-13"}))
+    assert fake.sent[0]["target"]["kind"] == "read-reply" and fake.sent[0]["input"] == case_input
+    assert out.output == reading

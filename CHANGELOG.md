@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0, 8 November 2026
+
+- The `read-reply` target: a person's reply to a follow-up about a commitment, read into what it
+  means (done, a new date, waiting on someone, blocked, an update, or unclear, with any dates). A
+  case's input is an object holding the reply, the commitment's fields and the day it is read on.
+- A reply's output is its reading, so the `fields` scorer compares the outcome and dates with the
+  case's reference.
+
 ## 0.3.0, 8 November 2026
 
 - An extraction's output is unwrapped for scoring: a vendor's fields, or a contract's
